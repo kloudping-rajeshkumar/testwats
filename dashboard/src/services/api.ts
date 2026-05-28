@@ -95,6 +95,33 @@ export interface MessagesResponse {
   total: number;
 }
 
+export interface Contact {
+  id: string;
+  sessionId: string;
+  chatId: string;
+  phone: string;
+  name: string | null;
+  pushName: string | null;
+  isGroup: boolean;
+  profilePicUrl: string | null;
+  status: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface ScheduledMessage {
+  id: string;
+  sessionId: string;
+  chatId: string;
+  message: string;
+  scheduledAt: string;
+  status: 'pending' | 'sent' | 'failed' | 'cancelled';
+  errorMessage: string | null;
+  sentAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
 export interface HealthStatus {
   status: 'ok' | 'error';
   timestamp?: string;
@@ -318,6 +345,86 @@ export const messageApi = {
       method: 'POST',
       body: JSON.stringify({ chatId, url, filename }),
     }),
+};
+
+// =============================================================================
+// Contact API
+// =============================================================================
+
+export const contactApi = {
+  list: (sessionId: string) => request<Contact[]>(`/sessions/${sessionId}/contacts`),
+  getMap: (sessionId: string) => request<Record<string, Contact>>(`/sessions/${sessionId}/contacts/map`),
+  save: (sessionId: string, chatId: string, name: string, phone?: string) =>
+    request<Contact>(`/sessions/${sessionId}/contacts`, {
+      method: 'POST',
+      body: JSON.stringify({ chatId, name, phone }),
+    }),
+  updateName: (sessionId: string, chatId: string, name: string) =>
+    request<Contact>(`/sessions/${sessionId}/contacts/${encodeURIComponent(chatId)}/name`, {
+      method: 'PUT',
+      body: JSON.stringify({ name }),
+    }),
+};
+
+// =============================================================================
+// Scheduled Messages API
+// =============================================================================
+
+export const scheduledMessageApi = {
+  list: (sessionId?: string) => {
+    const query = sessionId ? `?sessionId=${encodeURIComponent(sessionId)}` : '';
+    return request<ScheduledMessage[]>(`/scheduled-messages${query}`);
+  },
+  get: (id: string) => request<ScheduledMessage>(`/scheduled-messages/${id}`),
+  create: (data: { sessionId: string; chatId: string; message: string; scheduledAt: string }) =>
+    request<ScheduledMessage>('/scheduled-messages', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
+  update: (id: string, data: { chatId?: string; message?: string; scheduledAt?: string }) =>
+    request<ScheduledMessage>(`/scheduled-messages/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    }),
+  cancel: (id: string) =>
+    request<ScheduledMessage>(`/scheduled-messages/${id}`, { method: 'DELETE' }),
+};
+
+// =============================================================================
+// Message Template Types & API
+// =============================================================================
+
+export interface MessageTemplate {
+  id: string;
+  name: string;
+  category: string | null;
+  body: string;
+  language: string | null;
+  isActive: boolean;
+  usageCount: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export const templateApi = {
+  list: (category?: string) => {
+    const query = category ? `?category=${encodeURIComponent(category)}` : '';
+    return request<MessageTemplate[]>(`/templates${query}`);
+  },
+  getCategories: () => request<string[]>('/templates/categories'),
+  get: (id: string) => request<MessageTemplate>(`/templates/${id}`),
+  create: (data: { name: string; category?: string; body: string; language?: string }) =>
+    request<MessageTemplate>('/templates', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
+  update: (id: string, data: Partial<{ name: string; category: string; body: string; language: string; isActive: boolean }>) =>
+    request<MessageTemplate>(`/templates/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    }),
+  delete: (id: string) => request<void>(`/templates/${id}`, { method: 'DELETE' }),
+  use: (id: string) => request<MessageTemplate>(`/templates/${id}/use`, { method: 'POST' }),
 };
 
 // =============================================================================

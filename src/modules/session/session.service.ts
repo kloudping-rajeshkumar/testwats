@@ -17,6 +17,7 @@ import { EventsGateway } from '../events/events.gateway';
 import { WebhookService } from '../webhook/webhook.service';
 import { HookManager } from '../../core/hooks';
 import { Message, MessageDirection } from '../message/entities/message.entity';
+import { ContactService } from '../contact/contact.service';
 
 interface ReconnectState {
   attempts: number;
@@ -46,6 +47,7 @@ export class SessionService implements OnModuleDestroy, OnModuleInit {
     private readonly hookManager: HookManager,
     @InjectRepository(Message, 'data')
     private readonly messageRepository: Repository<Message>,
+    private readonly contactService: ContactService,
   ) {}
 
   /**
@@ -316,6 +318,11 @@ export class SessionService implements OnModuleDestroy, OnModuleInit {
             action: 'save_incoming_failed',
           });
         });
+
+        // Auto-save contact from incoming message
+        void this.contactService
+          .upsertFromMessage(id, message.chatId, message.pushName)
+          .catch(() => {});
 
         // Execute hook for message received - plugins can modify or stop processing
         void this.hookManager

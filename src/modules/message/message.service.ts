@@ -2,6 +2,7 @@ import { Injectable, BadRequestException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { SessionService } from '../session/session.service';
+import { ContactService } from '../contact/contact.service';
 import { SendTextMessageDto, SendMediaMessageDto, MessageResponseDto } from './dto';
 import { MediaInput } from '../../engine/interfaces/whatsapp-engine.interface';
 import { Message, MessageDirection, MessageStatus } from './entities/message.entity';
@@ -19,6 +20,7 @@ export class MessageService {
     @InjectRepository(Message, 'data')
     private readonly messageRepository: Repository<Message>,
     private readonly sessionService: SessionService,
+    private readonly contactService: ContactService,
     private readonly hookManager: HookManager,
   ) {}
 
@@ -410,7 +412,14 @@ export class MessageService {
       sessionId,
       direction: MessageDirection.INCOMING,
     });
-    return this.messageRepository.save(message);
+    const saved = await this.messageRepository.save(message);
+
+    if (data.chatId) {
+      const pushName = (data.metadata as Record<string, unknown>)?.pushName as string | undefined;
+      this.contactService.upsertFromMessage(sessionId, data.chatId, pushName).catch(() => {});
+    }
+
+    return saved;
   }
 
   /**

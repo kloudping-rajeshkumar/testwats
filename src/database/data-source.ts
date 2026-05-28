@@ -10,6 +10,9 @@ const dataEntities = [
   __dirname + '/../modules/session/**/*.entity{.ts,.js}',
   __dirname + '/../modules/webhook/**/*.entity{.ts,.js}',
   __dirname + '/../modules/message/**/*.entity{.ts,.js}',
+  __dirname + '/../modules/contact/**/*.entity{.ts,.js}',
+  __dirname + '/../modules/schedule/**/*.entity{.ts,.js}',
+  __dirname + '/../modules/template/**/*.entity{.ts,.js}',
 ];
 
 // SQLite configuration

@@ -119,6 +119,11 @@
   border: 1px solid var(--border);
 }
 
+.chat-avatar.group {
+  background: rgba(37, 211, 102, 0.1);
+  color: var(--primary);
+}
+
 .chat-info {
   flex: 1;
   min-width: 0;
@@ -145,6 +150,13 @@
   color: var(--text-muted);
   flex-shrink: 0;
   margin-left: 0.5rem;
+}
+
+.chat-phone-sub {
+  font-size: 0.6875rem;
+  color: var(--text-muted);
+  margin-bottom: 1px;
+  font-variant-numeric: tabular-nums;
 }
 
 .chat-preview {
@@ -187,16 +199,166 @@
   flex-shrink: 0;
 }
 
-.thread-header-info h3 {
+.thread-header-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.thread-header-name-row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.thread-header-name-row h3 {
   margin: 0;
   font-size: 0.9375rem;
   font-weight: 600;
   color: var(--text-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
-.thread-header-info span {
+.thread-header-details {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  margin-top: 2px;
+}
+
+.thread-header-details span {
   font-size: 0.75rem;
   color: var(--text-muted);
+}
+
+.thread-phone {
+  font-variant-numeric: tabular-nums;
+}
+
+.thread-pushname {
+  font-style: italic;
+  opacity: 0.8;
+}
+
+.thread-msg-count::before {
+  content: '';
+  display: inline-block;
+  width: 3px;
+  height: 3px;
+  border-radius: 50%;
+  background: var(--text-muted);
+  vertical-align: middle;
+  margin-right: 0.75rem;
+}
+
+/* ── Contact edit inline ──────────────────────────── */
+
+/* ── Save Contact button ─────────────────────────── */
+
+.contact-save-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.375rem;
+  padding: 3px 10px;
+  font-size: 0.6875rem;
+  font-weight: 600;
+  color: var(--primary);
+  background: rgba(37, 211, 102, 0.08);
+  border: 1px solid rgba(37, 211, 102, 0.25);
+  border-radius: 12px;
+  cursor: pointer;
+  transition: all 0.15s;
+  white-space: nowrap;
+}
+
+.contact-save-btn:hover {
+  background: rgba(37, 211, 102, 0.15);
+  border-color: var(--primary);
+}
+
+.chat-right {
+  display: flex;
+  align-items: center;
+  gap: 0.375rem;
+  flex-shrink: 0;
+}
+
+.chat-unsaved-badge {
+  color: var(--text-muted);
+  opacity: 0.5;
+  display: flex;
+  align-items: center;
+}
+
+.chat-item:hover .chat-unsaved-badge {
+  color: var(--primary);
+  opacity: 1;
+}
+
+.contact-edit-btn {
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  padding: 2px 4px;
+  border-radius: 4px;
+  display: flex;
+  align-items: center;
+  transition: color 0.15s, background 0.15s;
+}
+
+.contact-edit-btn:hover {
+  color: var(--primary);
+  background: rgba(37, 211, 102, 0.08);
+}
+
+.contact-edit-inline {
+  display: flex;
+  align-items: center;
+  gap: 0.375rem;
+}
+
+.contact-edit-inline input {
+  padding: 0.25rem 0.5rem;
+  font-size: 0.875rem;
+  border: 1px solid var(--primary);
+  border-radius: var(--radius);
+  background: var(--bg-white);
+  width: 180px;
+}
+
+.contact-edit-inline input:focus {
+  outline: none;
+  box-shadow: 0 0 0 2px rgba(37, 211, 102, 0.2);
+}
+
+.contact-edit-save,
+.contact-edit-cancel {
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 4px;
+  border-radius: 4px;
+  display: flex;
+  align-items: center;
+}
+
+.contact-edit-save {
+  color: var(--primary);
+}
+
+.contact-edit-save:hover {
+  background: rgba(37, 211, 102, 0.1);
+}
+
+.contact-edit-cancel {
+  color: var(--text-muted);
+}
+
+.contact-edit-cancel:hover {
+  color: #DC2626;
+  background: rgba(220, 38, 38, 0.08);
 }
 
 .message-list {

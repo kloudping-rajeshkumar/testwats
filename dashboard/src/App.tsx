@@ -17,6 +17,8 @@ const ApiKeys = lazy(() => import('./pages/ApiKeys').then(m => ({ default: m.Api
 const Conversations = lazy(() => import('./pages/Conversations').then(m => ({ default: m.Conversations })));
 const MessageTester = lazy(() => import('./pages/MessageTester').then(m => ({ default: m.MessageTester })));
 const Infrastructure = lazy(() => import('./pages/Infrastructure').then(m => ({ default: m.Infrastructure })));
+const ScheduledMessages = lazy(() => import('./pages/ScheduledMessages'));
+const Templates = lazy(() => import('./pages/Templates'));
 const Plugins = lazy(() => import('./pages/Plugins'));
 
 const queryClient = new QueryClient({
@@ -106,6 +108,8 @@ function AppContent() {
             {role === 'admin' && <Route path="api-keys" element={<ApiKeys />} />}
             <Route path="logs" element={<Logs />} />
             <Route path="conversations" element={<Conversations />} />
+            <Route path="scheduled" element={<ScheduledMessages />} />
+            <Route path="templates" element={<Templates />} />
             <Route path="message-tester" element={<MessageTester />} />
             <Route path="infrastructure" element={<Infrastructure />} />
             {role === 'admin' && <Route path="plugins" element={<Plugins />} />}

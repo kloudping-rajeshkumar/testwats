@@ -7,6 +7,9 @@ import {
   infraApi,
   pluginsApi,
   messageApi,
+  contactApi,
+  scheduledMessageApi,
+  templateApi,
   type Webhook,
 } from '../services/api';
 
@@ -22,6 +25,10 @@ export const queryKeys = {
     ['logs', params] as const,
   infraStatus: ['infra', 'status'] as const,
   messages: (sessionId: string, chatId?: string) => ['messages', sessionId, chatId] as const,
+  contacts: (sessionId: string) => ['contacts', sessionId] as const,
+  scheduledMessages: (sessionId?: string) => ['scheduledMessages', sessionId] as const,
+  templates: (category?: string) => ['templates', category] as const,
+  templateCategories: ['templates', 'categories'] as const,
   plugins: ['plugins'] as const,
   engines: ['engines'] as const,
   currentEngine: ['engines', 'current'] as const,
@@ -240,5 +247,108 @@ export function useMessagesQuery(sessionId: string, chatId?: string, limit = 50)
     enabled: !!sessionId,
     staleTime: 5_000,
     refetchInterval: 5_000,
+  });
+}
+
+export function useContactMapQuery(sessionId: string) {
+  return useQuery({
+    queryKey: queryKeys.contacts(sessionId),
+    queryFn: () => contactApi.getMap(sessionId),
+    enabled: !!sessionId,
+    staleTime: 30_000,
+    refetchInterval: 30_000,
+  });
+}
+
+// ── Scheduled Messages Queries ──────────────────────────────────────
+
+export function useScheduledMessagesQuery(sessionId?: string) {
+  return useQuery({
+    queryKey: queryKeys.scheduledMessages(sessionId),
+    queryFn: () => scheduledMessageApi.list(sessionId),
+    staleTime: 10_000,
+    refetchInterval: 15_000,
+  });
+}
+
+export function useCreateScheduledMessageMutation() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (data: { sessionId: string; chatId: string; message: string; scheduledAt: string }) =>
+      scheduledMessageApi.create(data),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['scheduledMessages'] });
+    },
+  });
+}
+
+export function useUpdateScheduledMessageMutation() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (params: { id: string; data: { chatId?: string; message?: string; scheduledAt?: string } }) =>
+      scheduledMessageApi.update(params.id, params.data),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['scheduledMessages'] });
+    },
+  });
+}
+
+export function useCancelScheduledMessageMutation() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => scheduledMessageApi.cancel(id),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['scheduledMessages'] });
+    },
+  });
+}
+
+// ── Template Queries ──────────────────────────────────────────────────
+
+export function useTemplatesQuery(category?: string) {
+  return useQuery({
+    queryKey: queryKeys.templates(category),
+    queryFn: () => templateApi.list(category),
+    staleTime: 30_000,
+  });
+}
+
+export function useTemplateCategoriesQuery() {
+  return useQuery({
+    queryKey: queryKeys.templateCategories,
+    queryFn: templateApi.getCategories,
+    staleTime: 60_000,
+  });
+}
+
+export function useCreateTemplateMutation() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (data: { name: string; category?: string; body: string; language?: string }) =>
+      templateApi.create(data),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['templates'] });
+    },
+  });
+}
+
+export function useUpdateTemplateMutation() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (params: { id: string; data: Partial<{ name: string; category: string; body: string; language: string; isActive: boolean }> }) =>
+      templateApi.update(params.id, params.data),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['templates'] });
+    },
+  });
+}
+
+export function useDeleteTemplateMutation() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => templateApi.delete(id),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['templates'] });
+    },
   });
 }

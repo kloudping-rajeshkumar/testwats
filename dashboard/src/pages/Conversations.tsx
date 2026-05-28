@@ -1,25 +1,36 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Send, MessageSquare, Loader2, ArrowDown, ArrowUp, Check, CheckCheck, Clock, XCircle } from 'lucide-react';
-import { messageApi } from '../services/api';
+import { Send, MessageSquare, Loader2, ArrowDown, ArrowUp, Check, CheckCheck, Clock, XCircle, Users, Pencil, UserPlus, Save } from 'lucide-react';
+import { messageApi, contactApi } from '../services/api';
 import { useDocumentTitle } from '../hooks/useDocumentTitle';
 import { useRole } from '../hooks/useRole';
-import { useSessionsQuery, useMessagesQuery } from '../hooks/queries';
+import { useSessionsQuery, useMessagesQuery, useContactMapQuery } from '../hooks/queries';
 import { PageHeader } from '../components/PageHeader';
-import type { Message } from '../services/api';
+import type { Message, Contact } from '../services/api';
 import './Conversations.css';
 
 // ── Helpers ──────────────────────────────────────────────────────────
 
+function toMs(ts: string | number | null | undefined): number {
+  if (!ts) return 0;
+  const n = typeof ts === 'string' ? Number(ts) : ts;
+  if (isNaN(n)) {
+    const parsed = new Date(ts as string).getTime();
+    return isNaN(parsed) ? 0 : parsed;
+  }
+  return n > 1e12 ? n : n * 1000;
+}
+
 function formatTime(ts: string | number | null | undefined): string {
-  if (!ts) return '';
-  const d = typeof ts === 'number' ? new Date(ts > 1e12 ? ts : ts * 1000) : new Date(ts);
-  return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  const ms = toMs(ts);
+  if (!ms) return '';
+  return new Date(ms).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 }
 
 function formatDate(ts: string | number | null | undefined): string {
-  if (!ts) return '';
-  const d = typeof ts === 'number' ? new Date(ts > 1e12 ? ts : ts * 1000) : new Date(ts);
+  const ms = toMs(ts);
+  if (!ms) return '';
+  const d = new Date(ms);
   const today = new Date();
   if (d.toDateString() === today.toDateString()) return 'Today';
   const yesterday = new Date(today);
@@ -28,18 +39,95 @@ function formatDate(ts: string | number | null | undefined): string {
   return d.toLocaleDateString([], { month: 'short', day: 'numeric', year: 'numeric' });
 }
 
-function getInitials(chatId: string): string {
+/**
+ * Format a phone number extracted from a WhatsApp chatId.
+ *
+ * WhatsApp chatIds are always <country_code><local_number>@c.us
+ *   - India:  91 + 10 digits = 12 digits  → +91 93423 18857
+ *   - US/CA:   1 + 10 digits = 11 digits  → +1 93423 18857
+ *   - UK:     44 + 10 digits = 12 digits  → +44 93423 18857
+ *
+ * When the number has only 10 digits the country code is missing
+ * (old data or edge case), so we show without "+" prefix.
+ */
+function formatPhone(phone: string): string {
+  if (!phone) return '';
+  const digits = phone.replace(/[^0-9]/g, '');
+  if (digits.length < 4) return digits;
+
+  // 10 digits → local number (no country code)
+  // Example: 9342318857 → 93423 18857
+  if (digits.length === 10) {
+    return `${digits.slice(0, 5)} ${digits.slice(5)}`;
+  }
+
+  // 11+ digits → international: last 10 = local, rest = country code
+  // Example: 919342318857 → +91 93423 18857
+  if (digits.length >= 11) {
+    const cc = digits.slice(0, digits.length - 10);
+    const local = digits.slice(-10);
+    return `+${cc} ${local.slice(0, 5)} ${local.slice(5)}`;
+  }
+
+  // 7-9 digits → short number, just group nicely
+  return `+${digits.slice(0, 3)} ${digits.slice(3)}`;
+}
+
+/**
+ * Normalize chatId:
+ *  1. Replace @s.whatsapp.net → @c.us
+ *  2. If a 10-digit number has a matching 12-digit (with 91 prefix) in the
+ *     same session, merge them. We do this by detecting the session country
+ *     code from the selectedSession.phone and prepending it to short chatIds.
+ */
+function normalizeChatId(chatId: string, sessionPhone?: string): string {
+  let id = chatId.replace('@s.whatsapp.net', '@c.us');
+
+  // If the phone part is exactly 10 digits and we know the session country code,
+  // prepend the country code to eliminate duplicates.
+  if (sessionPhone && id.endsWith('@c.us')) {
+    const phonePart = id.replace('@c.us', '');
+    if (phonePart.length === 10 && /^\d{10}$/.test(phonePart)) {
+      // Extract country code from session phone (e.g. "919791823103" → "91")
+      const sessionDigits = sessionPhone.replace(/[^0-9]/g, '');
+      if (sessionDigits.length >= 12) {
+        const cc = sessionDigits.slice(0, sessionDigits.length - 10);
+        id = `${cc}${phonePart}@c.us`;
+      }
+    }
+  }
+
+  return id;
+}
+
+function extractPhone(chatId: string): string {
+  // Strip suffix only — don't normalize here (caller passes already-normalized id)
+  return chatId.replace('@c.us', '').replace('@s.whatsapp.net', '').replace('@g.us', '');
+}
+
+function getContactDisplayName(chatId: string, contactMap: Record<string, Contact>): string {
+  const contact = contactMap[chatId];
+  if (contact?.name) return contact.name;
+  if (contact?.pushName) return contact.pushName;
+  if (chatId.endsWith('@g.us')) return chatId.replace('@g.us', '');
+  return formatPhone(extractPhone(chatId));
+}
+
+function getInitials(chatId: string, contactMap: Record<string, Contact>): string {
+  const contact = contactMap[chatId];
+  if (contact?.name) {
+    const parts = contact.name.trim().split(/\s+/);
+    if (parts.length >= 2) return (parts[0][0] + parts[1][0]).toUpperCase();
+    return contact.name.slice(0, 2).toUpperCase();
+  }
+  if (contact?.pushName) {
+    const parts = contact.pushName.trim().split(/\s+/);
+    if (parts.length >= 2) return (parts[0][0] + parts[1][0]).toUpperCase();
+    return contact.pushName.slice(0, 2).toUpperCase();
+  }
   if (chatId.endsWith('@g.us')) return 'G';
   const digits = chatId.replace(/[^0-9]/g, '');
   return digits.slice(-2) || '?';
-}
-
-function getChatDisplayName(chatId: string): string {
-  if (chatId.endsWith('@g.us')) {
-    return chatId.replace('@g.us', '');
-  }
-  const phone = chatId.replace('@c.us', '').replace('@s.whatsapp.net', '');
-  return '+' + phone;
 }
 
 interface ChatSummary {
@@ -75,6 +163,9 @@ export function Conversations() {
   const [search, setSearch] = useState('');
   const [newMessage, setNewMessage] = useState('');
   const [sending, setSending] = useState(false);
+  const [editingContact, setEditingContact] = useState('');
+  const [editName, setEditName] = useState('');
+  const [savingContact, setSavingContact] = useState(false);
 
   const messageEndRef = useRef<HTMLDivElement>(null);
 
@@ -92,18 +183,28 @@ export function Conversations() {
     500,
   );
 
+  // Fetch contacts map for the session
+  const { data: contactMap = {}, refetch: refetchContacts } = useContactMapQuery(sessionId);
+
+  const selectedSession = allSessions.find(s => s.id === sessionId);
+  const sessionPhone = selectedSession?.phone || '';
+
+  // Helper: normalize chatId with session country code to merge duplicates
+  const normalize = (chatId: string) => normalizeChatId(chatId, sessionPhone);
+
   const messages: Message[] = messagesData?.messages || [];
 
-  // Build chat list from messages
+  // Build chat list from messages (normalize chatId to prevent duplicates)
   const chatMap = new Map<string, ChatSummary>();
   for (const msg of messages) {
-    const existing = chatMap.get(msg.chatId);
-    const msgTime = msg.timestamp || msg.createdAt;
+    const chatId = normalize(msg.chatId);
+    const existing = chatMap.get(chatId);
+    const msgMs = toMs(msg.timestamp) || toMs(msg.createdAt);
     if (!existing) {
-      chatMap.set(msg.chatId, {
-        chatId: msg.chatId,
+      chatMap.set(chatId, {
+        chatId,
         lastMessage: msg.body || `[${msg.type}]`,
-        lastTime: msgTime,
+        lastTime: msgMs,
         direction: msg.direction,
         unread: msg.direction === 'incoming' ? 1 : 0,
         messageCount: 1,
@@ -111,38 +212,37 @@ export function Conversations() {
     } else {
       existing.messageCount++;
       if (msg.direction === 'incoming') existing.unread++;
-      const existingTs = typeof existing.lastTime === 'number' ? existing.lastTime : new Date(existing.lastTime).getTime();
-      const msgTs = typeof msgTime === 'number' ? (msgTime > 1e12 ? msgTime : msgTime * 1000) : new Date(msgTime).getTime();
-      if (msgTs > existingTs) {
+      if (msgMs > (existing.lastTime as number)) {
         existing.lastMessage = msg.body || `[${msg.type}]`;
-        existing.lastTime = msgTime;
+        existing.lastTime = msgMs;
         existing.direction = msg.direction;
       }
     }
   }
 
   let chats = Array.from(chatMap.values()).sort((a, b) => {
-    const ta = typeof a.lastTime === 'number' ? (a.lastTime > 1e12 ? a.lastTime : a.lastTime * 1000) : new Date(a.lastTime).getTime();
-    const tb = typeof b.lastTime === 'number' ? (b.lastTime > 1e12 ? b.lastTime : b.lastTime * 1000) : new Date(b.lastTime).getTime();
-    return tb - ta;
+    return (b.lastTime as number) - (a.lastTime as number);
   });
 
   // Filter chats by search
   if (search) {
     const q = search.toLowerCase();
-    chats = chats.filter(c =>
-      getChatDisplayName(c.chatId).toLowerCase().includes(q) ||
-      c.lastMessage.toLowerCase().includes(q)
-    );
+    chats = chats.filter(c => {
+      const displayName = getContactDisplayName(c.chatId, contactMap);
+      const phone = extractPhone(c.chatId);
+      return displayName.toLowerCase().includes(q) ||
+        phone.includes(q) ||
+        c.lastMessage.toLowerCase().includes(q);
+    });
   }
 
-  // Messages for the active chat
+  // Messages for the active chat (normalize to merge @c.us / @s.whatsapp.net + country code)
   const chatMessages = messages
-    .filter(m => m.chatId === activeChatId)
+    .filter(m => normalize(m.chatId) === activeChatId)
     .sort((a, b) => {
-      const ta = a.timestamp || new Date(a.createdAt).getTime() / 1000;
-      const tb = b.timestamp || new Date(b.createdAt).getTime() / 1000;
-      return (ta as number) - (tb as number);
+      const ta = toMs(a.timestamp) || toMs(a.createdAt);
+      const tb = toMs(b.timestamp) || toMs(b.createdAt);
+      return ta - tb;
     });
 
   // Auto-scroll to bottom
@@ -178,7 +278,6 @@ export function Conversations() {
     try {
       await messageApi.sendText(sessionId, activeChatId, newMessage.trim());
       setNewMessage('');
-      // Refetch to show the sent message
       setTimeout(() => void refetchMessages(), 500);
     } catch (err) {
       console.error('Send failed:', err);
@@ -191,6 +290,29 @@ export function Conversations() {
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
       void handleSend();
+    }
+  };
+
+  const handleSaveContactName = async (chatId: string) => {
+    if (!editName.trim() || !sessionId) return;
+    setSavingContact(true);
+    try {
+      const existingContact = contactMap[chatId];
+      if (existingContact) {
+        // Update existing contact
+        await contactApi.updateName(sessionId, chatId, editName.trim());
+      } else {
+        // Save new contact
+        const phone = chatId.replace('@c.us', '').replace('@s.whatsapp.net', '');
+        await contactApi.save(sessionId, chatId, editName.trim(), phone);
+      }
+      setEditingContact('');
+      setEditName('');
+      void refetchContacts();
+    } catch (err) {
+      console.error('Failed to save contact:', err);
+    } finally {
+      setSavingContact(false);
     }
   };
 
@@ -207,7 +329,8 @@ export function Conversations() {
     }
   }
 
-  const selectedSession = allSessions.find(s => s.id === sessionId);
+  const activeContact = contactMap[activeChatId];
+  const isGroup = activeChatId.endsWith('@g.us');
 
   if (loadingSessions) {
     return (
@@ -242,7 +365,7 @@ export function Conversations() {
           <div className="chat-search">
             <input
               type="text"
-              placeholder={t('conversations.searchPlaceholder', 'Search conversations...')}
+              placeholder={t('conversations.searchPlaceholder', 'Search by name, number, or message...')}
               value={search}
               onChange={e => setSearch(e.target.value)}
             />
@@ -262,37 +385,56 @@ export function Conversations() {
                 }</p>
               </div>
             ) : (
-              chats.map(chat => (
-                <li
-                  key={chat.chatId}
-                  className={`chat-item ${activeChatId === chat.chatId ? 'active' : ''}`}
-                  onClick={() => setActiveChatId(chat.chatId)}
-                >
-                  <div className="chat-avatar">{getInitials(chat.chatId)}</div>
-                  <div className="chat-info">
-                    <div className="chat-info-top">
-                      <span className="chat-name">{getChatDisplayName(chat.chatId)}</span>
-                      <span className="chat-time">{formatTime(chat.lastTime)}</span>
+              chats.map(chat => {
+                const displayName = getContactDisplayName(chat.chatId, contactMap);
+                const contact = contactMap[chat.chatId];
+                const phone = extractPhone(chat.chatId);
+                const chatIsGroup = chat.chatId.endsWith('@g.us');
+
+                return (
+                  <li
+                    key={chat.chatId}
+                    className={`chat-item ${activeChatId === chat.chatId ? 'active' : ''}`}
+                    onClick={() => setActiveChatId(chat.chatId)}
+                  >
+                    <div className={`chat-avatar ${chatIsGroup ? 'group' : ''}`}>
+                      {chatIsGroup ? <Users size={18} /> : getInitials(chat.chatId, contactMap)}
                     </div>
-                    <div className="chat-preview">
-                      {chat.direction === 'outgoing' && (
-                        <span style={{ marginRight: 4 }}>
-                          <ArrowUp size={10} style={{ display: 'inline' }} />
+                    <div className="chat-info">
+                      <div className="chat-info-top">
+                        <span className="chat-name">{displayName}</span>
+                        <span className="chat-time">{formatTime(chat.lastTime)}</span>
+                      </div>
+                      {!chatIsGroup && contact?.name && (
+                        <div className="chat-phone-sub">{formatPhone(phone)}</div>
+                      )}
+                      <div className="chat-preview">
+                        {chat.direction === 'outgoing' && (
+                          <span style={{ marginRight: 4 }}>
+                            <ArrowUp size={10} style={{ display: 'inline' }} />
+                          </span>
+                        )}
+                        {chat.direction === 'incoming' && (
+                          <span style={{ marginRight: 4 }}>
+                            <ArrowDown size={10} style={{ display: 'inline' }} />
+                          </span>
+                        )}
+                        {chat.lastMessage}
+                      </div>
+                    </div>
+                    <div className="chat-right">
+                      {!chatIsGroup && !contact && (
+                        <span className="chat-unsaved-badge" title="Unsaved contact">
+                          <UserPlus size={12} />
                         </span>
                       )}
-                      {chat.direction === 'incoming' && (
-                        <span style={{ marginRight: 4 }}>
-                          <ArrowDown size={10} style={{ display: 'inline' }} />
-                        </span>
+                      {chat.messageCount > 0 && (
+                        <span className="chat-badge">{chat.messageCount}</span>
                       )}
-                      {chat.lastMessage}
                     </div>
-                  </div>
-                  {chat.messageCount > 0 && (
-                    <span className="chat-badge">{chat.messageCount}</span>
-                  )}
-                </li>
-              ))
+                  </li>
+                );
+              })
             )}
           </ul>
         </div>
@@ -302,10 +444,77 @@ export function Conversations() {
           {activeChatId ? (
             <>
               <div className="thread-header">
-                <div className="chat-avatar">{getInitials(activeChatId)}</div>
+                <div className={`chat-avatar ${isGroup ? 'group' : ''}`}>
+                  {isGroup ? <Users size={18} /> : getInitials(activeChatId, contactMap)}
+                </div>
                 <div className="thread-header-info">
-                  <h3>{getChatDisplayName(activeChatId)}</h3>
-                  <span>{chatMessages.length} messages</span>
+                  <div className="thread-header-name-row">
+                    {editingContact === activeChatId ? (
+                      <div className="contact-edit-inline">
+                        <input
+                          type="text"
+                          value={editName}
+                          onChange={e => setEditName(e.target.value)}
+                          onKeyDown={e => {
+                            if (e.key === 'Enter') void handleSaveContactName(activeChatId);
+                            if (e.key === 'Escape') setEditingContact('');
+                          }}
+                          placeholder="Enter contact name..."
+                          autoFocus
+                        />
+                        <button
+                          className="contact-edit-save"
+                          onClick={() => void handleSaveContactName(activeChatId)}
+                          disabled={savingContact}
+                        >
+                          {savingContact ? <Loader2 size={14} className="animate-spin" /> : <Check size={14} />}
+                        </button>
+                        <button
+                          className="contact-edit-cancel"
+                          onClick={() => setEditingContact('')}
+                        >
+                          <XCircle size={14} />
+                        </button>
+                      </div>
+                    ) : (
+                      <>
+                        <h3>{getContactDisplayName(activeChatId, contactMap)}</h3>
+                        {!isGroup && activeContact ? (
+                          <button
+                            className="contact-edit-btn"
+                            onClick={() => {
+                              setEditingContact(activeChatId);
+                              setEditName(activeContact?.name || activeContact?.pushName || '');
+                            }}
+                            title="Edit contact name"
+                          >
+                            <Pencil size={12} />
+                          </button>
+                        ) : !isGroup ? (
+                          <button
+                            className="contact-save-btn"
+                            onClick={() => {
+                              setEditingContact(activeChatId);
+                              setEditName('');
+                            }}
+                            title="Save contact"
+                          >
+                            <UserPlus size={14} />
+                            <span>Save Contact</span>
+                          </button>
+                        ) : null}
+                      </>
+                    )}
+                  </div>
+                  <div className="thread-header-details">
+                    {!isGroup && (
+                      <span className="thread-phone">{formatPhone(extractPhone(activeChatId))}</span>
+                    )}
+                    <span className="thread-msg-count">{chatMessages.length} messages</span>
+                    {activeContact?.pushName && activeContact.pushName !== activeContact.name && (
+                      <span className="thread-pushname">~{activeContact.pushName}</span>
+                    )}
+                  </div>
                 </div>
               </div>
 

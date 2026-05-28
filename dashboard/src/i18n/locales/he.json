@@ -59,6 +59,8 @@
     "webhooks": "Webhooks",
     "apiKeys": "מפתחות API",
     "conversations": "שיחות",
+    "scheduled": "מתוזמנות",
+    "templates": "תבניות",
     "messageTester": "בדיקת הודעות",
     "infrastructure": "תשתית",
     "plugins": "תוספים",

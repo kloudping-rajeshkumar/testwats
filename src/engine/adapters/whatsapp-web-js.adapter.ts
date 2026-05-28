@@ -143,16 +143,18 @@ export class WhatsAppWebJsAdapter extends EventEmitter implements IWhatsAppEngin
     // eslint-disable-next-line @typescript-eslint/no-misused-promises
     this.client.on('message', async msg => {
       try {
+        const chatId = msg.from.replace('@s.whatsapp.net', '@c.us');
         const incomingMessage: IncomingMessage = {
           id: msg.id._serialized,
           from: msg.from,
           to: msg.to,
-          chatId: msg.from,
+          chatId,
           body: msg.body,
           type: msg.type,
           timestamp: msg.timestamp,
           fromMe: msg.fromMe,
-          isGroup: msg.from.endsWith('@g.us'),
+          isGroup: chatId.endsWith('@g.us'),
+          pushName: (msg as unknown as { _data?: { notifyName?: string } })._data?.notifyName || undefined,
         };
 
         // Handle media
