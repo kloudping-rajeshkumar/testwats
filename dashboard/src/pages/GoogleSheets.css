@@ -1,0 +1,361 @@
+/* ── Google Sheets Page ───────────────────────────── */
+
+.google-sheets-page {
+  padding: 2rem;
+  width: 100%;
+  box-sizing: border-box;
+  max-width: 1400px;
+}
+
+.google-sheets-page .page-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  margin-bottom: 1.5rem;
+  gap: 1rem;
+}
+
+.google-sheets-page .page-header-left {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.google-sheets-page .page-header-left > svg {
+  color: var(--primary);
+  flex-shrink: 0;
+}
+
+.google-sheets-page .page-header h1 {
+  margin: 0;
+  font-size: 1.375rem;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.google-sheets-page .page-header p {
+  margin: 0.125rem 0 0;
+  font-size: 0.8125rem;
+  color: var(--text-muted);
+}
+
+.page-header-actions {
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+}
+
+/* ── Section ─────────────────────────────────────── */
+
+.gs-section {
+  background: var(--bg-white);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  margin-bottom: 1.25rem;
+  overflow: hidden;
+}
+
+.gs-section-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.875rem 1.25rem;
+  border-bottom: 1px solid var(--border);
+  background: var(--bg-light);
+}
+
+.gs-section-title {
+  font-size: 0.875rem;
+  font-weight: 700;
+  color: var(--text-primary);
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.gs-section-body {
+  padding: 1rem 1.25rem;
+}
+
+/* ── Account Cards ───────────────────────────────── */
+
+.gs-accounts-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 0.75rem;
+}
+
+.gs-account-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.75rem 1rem;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  transition: border-color 0.15s;
+}
+
+.gs-account-card:hover {
+  border-color: var(--primary);
+}
+
+.gs-account-info {
+  display: flex;
+  flex-direction: column;
+  gap: 0.125rem;
+}
+
+.gs-account-label {
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.gs-account-email {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+}
+
+/* ── Spreadsheet Table ───────────────────────────── */
+
+.gs-sheet-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.gs-sheet-table th {
+  text-align: left;
+  padding: 0.5rem 0.75rem;
+  font-size: 0.6875rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-muted);
+  border-bottom: 1px solid var(--border);
+}
+
+.gs-sheet-table td {
+  padding: 0.625rem 0.75rem;
+  font-size: 0.8125rem;
+  color: var(--text-primary);
+  border-bottom: 1px solid var(--border);
+}
+
+.gs-sheet-table tr:last-child td {
+  border-bottom: none;
+}
+
+.gs-sheet-table tr:hover td {
+  background: var(--bg-light);
+}
+
+.gs-sheet-title {
+  font-weight: 600;
+}
+
+.gs-sheet-url {
+  font-size: 0.75rem;
+  color: var(--primary);
+  text-decoration: none;
+  word-break: break-all;
+}
+
+.gs-sheet-url:hover {
+  text-decoration: underline;
+}
+
+.gs-sheet-date {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+}
+
+.gs-sheet-actions {
+  display: flex;
+  gap: 0.25rem;
+}
+
+/* ── Buttons ─────────────────────────────────────── */
+
+.btn-primary {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.375rem;
+  padding: 0.4375rem 0.875rem;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: white;
+  background: var(--primary);
+  border: none;
+  border-radius: var(--radius);
+  cursor: pointer;
+  transition: opacity 0.2s;
+}
+
+.btn-primary:hover:not(:disabled) {
+  opacity: 0.9;
+}
+
+.btn-primary:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.btn-sm {
+  padding: 0.3125rem 0.625rem;
+  font-size: 0.75rem;
+}
+
+.btn-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  padding: 0;
+  font-size: 0;
+  color: var(--text-muted);
+  background: transparent;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.btn-icon:hover {
+  background: var(--bg-light);
+  color: var(--text-primary);
+  border-color: var(--text-muted);
+}
+
+.btn-icon.danger:hover {
+  background: rgba(239, 68, 68, 0.08);
+  color: #ef4444;
+  border-color: #ef4444;
+}
+
+/* ── Modal ───────────────────────────────────────── */
+
+.gs-modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+  padding: 1rem;
+}
+
+.gs-modal {
+  background: var(--bg-white);
+  border-radius: 12px;
+  padding: 1.5rem;
+  max-width: 460px;
+  width: 100%;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.2);
+}
+
+.gs-modal h3 {
+  margin: 0 0 1rem;
+  font-size: 1rem;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.gs-form-group {
+  display: flex;
+  flex-direction: column;
+  gap: 0.375rem;
+  margin-bottom: 0.875rem;
+}
+
+.gs-form-group label {
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--text-secondary);
+}
+
+.gs-form-group input,
+.gs-form-group select,
+.gs-form-group textarea {
+  padding: 0.5rem 0.75rem;
+  font-size: 0.875rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg-white);
+  color: var(--text-primary);
+  font-family: inherit;
+}
+
+.gs-form-group input:focus,
+.gs-form-group select:focus,
+.gs-form-group textarea:focus {
+  outline: none;
+  border-color: var(--primary);
+  box-shadow: 0 0 0 2px rgba(37, 211, 102, 0.15);
+}
+
+.gs-form-hint {
+  font-size: 0.6875rem;
+  color: var(--text-muted);
+}
+
+.gs-modal-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.5rem;
+  margin-top: 1.25rem;
+}
+
+/* ── Empty State ─────────────────────────────────── */
+
+.gs-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 2.5rem 2rem;
+  color: var(--text-muted);
+  gap: 0.5rem;
+  text-align: center;
+}
+
+.gs-empty svg {
+  opacity: 0.2;
+}
+
+.gs-empty p {
+  margin: 0;
+  font-size: 0.8125rem;
+}
+
+/* ── Responsive ──────────────────────────────────── */
+
+@media (max-width: 768px) {
+  .google-sheets-page {
+    padding: 1rem;
+  }
+
+  .google-sheets-page .page-header {
+    flex-direction: column;
+  }
+
+  .page-header-actions {
+    width: 100%;
+  }
+
+  .page-header-actions button {
+    flex: 1;
+  }
+
+  .gs-accounts-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .gs-sheet-table {
+    font-size: 0.75rem;
+  }
+}

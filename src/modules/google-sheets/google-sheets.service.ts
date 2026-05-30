@@ -1,0 +1,291 @@
+import { Injectable, BadRequestException, NotFoundException } from '@nestjs/common';
+import { InjectRepository } from '@nestjs/typeorm';
+import { ConfigService } from '@nestjs/config';
+import { Repository } from 'typeorm';
+import { google, sheets_v4, drive_v3 } from 'googleapis';
+import { OAuth2Client } from 'google-auth-library';
+import { GoogleToken } from './entities/google-token.entity';
+import { GoogleSheet } from './entities/google-sheet.entity';
+import { CreateSheetDto, UpdateSheetDto, ShareSheetDto, AppendRowsDto } from './dto';
+import { ShareRole } from './dto/share-sheet.dto';
+
+@Injectable()
+export class GoogleSheetsService {
+  private readonly clientId: string;
+  private readonly clientSecret: string;
+  private readonly redirectUri: string;
+
+  constructor(
+    @InjectRepository(GoogleToken, 'data')
+    private readonly tokenRepository: Repository<GoogleToken>,
+    @InjectRepository(GoogleSheet, 'data')
+    private readonly sheetRepository: Repository<GoogleSheet>,
+    private readonly configService: ConfigService,
+  ) {
+    this.clientId = this.configService.get<string>('google.clientId', '');
+    this.clientSecret = this.configService.get<string>('google.clientSecret', '');
+    this.redirectUri = this.configService.get<string>('google.redirectUri', 'http://localhost:2785/api/google-sheets/oauth/callback');
+  }
+
+  private createOAuth2Client(): OAuth2Client {
+    if (!this.clientId || !this.clientSecret) {
+      throw new BadRequestException('Google OAuth2 credentials not configured. Set GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET.');
+    }
+    return new google.auth.OAuth2(this.clientId, this.clientSecret, this.redirectUri);
+  }
+
+  getAuthUrl(label: string): string {
+    const oauth2Client = this.createOAuth2Client();
+    return oauth2Client.generateAuthUrl({
+      access_type: 'offline',
+      prompt: 'consent',
+      scope: [
+        'https://www.googleapis.com/auth/spreadsheets',
+        'https://www.googleapis.com/auth/drive',
+        'https://www.googleapis.com/auth/userinfo.email',
+      ],
+      state: label,
+    });
+  }
+
+  async handleOAuthCallback(code: string, label: string): Promise<GoogleToken> {
+    const oauth2Client = this.createOAuth2Client();
+    const { tokens } = await oauth2Client.getToken(code);
+
+    if (!tokens.refresh_token) {
+      throw new BadRequestException('No refresh token received. Revoke app access in Google Account settings and try again.');
+    }
+
+    oauth2Client.setCredentials(tokens);
+    const oauth2 = google.oauth2({ version: 'v2', auth: oauth2Client });
+    const { data: userInfo } = await oauth2.userinfo.get();
+
+    const existing = await this.tokenRepository.findOne({ where: { label } });
+    if (existing) {
+      existing.accessToken = tokens.access_token!;
+      existing.refreshToken = tokens.refresh_token;
+      existing.expiryDate = tokens.expiry_date?.toString() || '';
+      existing.email = userInfo.email || '';
+      return this.tokenRepository.save(existing);
+    }
+
+    const token = new GoogleToken();
+    token.label = label;
+    token.accessToken = tokens.access_token!;
+    token.refreshToken = tokens.refresh_token;
+    token.expiryDate = tokens.expiry_date?.toString() || '';
+    token.email = userInfo.email || '';
+    return this.tokenRepository.save(token);
+  }
+
+  private async getAuthenticatedClient(tokenLabel: string): Promise<OAuth2Client> {
+    const token = await this.tokenRepository.findOne({ where: { label: tokenLabel } });
+    if (!token) {
+      throw new NotFoundException(`Google account "${tokenLabel}" not found. Connect it first via /api/google-sheets/auth.`);
+    }
+
+    const oauth2Client = this.createOAuth2Client();
+    oauth2Client.setCredentials({
+      access_token: token.accessToken,
+      refresh_token: token.refreshToken,
+      expiry_date: token.expiryDate ? parseInt(token.expiryDate) : undefined,
+    });
+
+    oauth2Client.on('tokens', async (newTokens) => {
+      if (newTokens.access_token) {
+        token.accessToken = newTokens.access_token;
+      }
+      if (newTokens.expiry_date) {
+        token.expiryDate = newTokens.expiry_date.toString();
+      }
+      await this.tokenRepository.save(token);
+    });
+
+    return oauth2Client;
+  }
+
+  private async getSheetsApi(tokenLabel: string): Promise<sheets_v4.Sheets> {
+    const auth = await this.getAuthenticatedClient(tokenLabel);
+    return google.sheets({ version: 'v4', auth });
+  }
+
+  private async getDriveApi(tokenLabel: string): Promise<drive_v3.Drive> {
+    const auth = await this.getAuthenticatedClient(tokenLabel);
+    return google.drive({ version: 'v3', auth });
+  }
+
+  async listAccounts() {
+    const tokens = await this.tokenRepository.find({ order: { createdAt: 'DESC' } });
+    return tokens.map((t) => ({
+      id: t.id,
+      label: t.label,
+      email: t.email,
+      createdAt: t.createdAt,
+      updatedAt: t.updatedAt,
+    }));
+  }
+
+  async removeAccount(label: string): Promise<void> {
+    const token = await this.tokenRepository.findOne({ where: { label } });
+    if (!token) {
+      throw new NotFoundException(`Google account "${label}" not found.`);
+    }
+    await this.tokenRepository.remove(token);
+  }
+
+  async createSpreadsheet(dto: CreateSheetDto): Promise<GoogleSheet> {
+    const sheets = await this.getSheetsApi(dto.tokenLabel);
+
+    const sheetTabs = (dto.sheetNames || ['Sheet1']).map((title) => ({
+      properties: { title },
+    }));
+
+    const { data: spreadsheet } = await sheets.spreadsheets.create({
+      requestBody: {
+        properties: { title: dto.title },
+        sheets: sheetTabs,
+      },
+    });
+
+    if (dto.headers && dto.headers.length > 0) {
+      const firstSheetTitle = dto.sheetNames?.[0] || 'Sheet1';
+      await sheets.spreadsheets.values.update({
+        spreadsheetId: spreadsheet.spreadsheetId!,
+        range: `${firstSheetTitle}!A1`,
+        valueInputOption: 'USER_ENTERED',
+        requestBody: { values: [dto.headers] },
+      });
+    }
+
+    const record = new GoogleSheet();
+    record.tokenLabel = dto.tokenLabel;
+    record.spreadsheetId = spreadsheet.spreadsheetId!;
+    record.title = dto.title;
+    record.spreadsheetUrl = spreadsheet.spreadsheetUrl || '';
+    return this.sheetRepository.save(record);
+  }
+
+  async getSpreadsheet(tokenLabel: string, spreadsheetId: string) {
+    const sheets = await this.getSheetsApi(tokenLabel);
+    const { data } = await sheets.spreadsheets.get({ spreadsheetId });
+    return {
+      spreadsheetId: data.spreadsheetId,
+      title: data.properties?.title,
+      url: data.spreadsheetUrl,
+      sheets: data.sheets?.map((s) => ({
+        sheetId: s.properties?.sheetId,
+        title: s.properties?.title,
+        rowCount: s.properties?.gridProperties?.rowCount,
+        columnCount: s.properties?.gridProperties?.columnCount,
+      })),
+    };
+  }
+
+  async readRange(tokenLabel: string, spreadsheetId: string, range: string) {
+    const sheets = await this.getSheetsApi(tokenLabel);
+    const { data } = await sheets.spreadsheets.values.get({
+      spreadsheetId,
+      range,
+    });
+    return {
+      range: data.range,
+      values: data.values || [],
+    };
+  }
+
+  async updateRange(spreadsheetId: string, dto: UpdateSheetDto) {
+    const sheets = await this.getSheetsApi(dto.tokenLabel);
+    const { data } = await sheets.spreadsheets.values.update({
+      spreadsheetId,
+      range: dto.range,
+      valueInputOption: dto.valueInputOption || 'USER_ENTERED',
+      requestBody: { values: dto.values },
+    });
+    return {
+      updatedRange: data.updatedRange,
+      updatedRows: data.updatedRows,
+      updatedColumns: data.updatedColumns,
+      updatedCells: data.updatedCells,
+    };
+  }
+
+  async appendRows(spreadsheetId: string, dto: AppendRowsDto) {
+    const sheets = await this.getSheetsApi(dto.tokenLabel);
+    const { data } = await sheets.spreadsheets.values.append({
+      spreadsheetId,
+      range: dto.range || 'Sheet1',
+      valueInputOption: 'USER_ENTERED',
+      requestBody: { values: dto.values },
+    });
+    return {
+      updatedRange: data.updates?.updatedRange,
+      updatedRows: data.updates?.updatedRows,
+      updatedCells: data.updates?.updatedCells,
+    };
+  }
+
+  async clearRange(tokenLabel: string, spreadsheetId: string, range: string) {
+    const sheets = await this.getSheetsApi(tokenLabel);
+    await sheets.spreadsheets.values.clear({
+      spreadsheetId,
+      range,
+    });
+    return { cleared: true, range };
+  }
+
+  async deleteSpreadsheet(tokenLabel: string, spreadsheetId: string): Promise<void> {
+    const drive = await this.getDriveApi(tokenLabel);
+    await drive.files.delete({ fileId: spreadsheetId });
+    await this.sheetRepository.delete({ spreadsheetId });
+  }
+
+  async shareSpreadsheet(spreadsheetId: string, dto: ShareSheetDto) {
+    const drive = await this.getDriveApi(dto.tokenLabel);
+    const { data } = await drive.permissions.create({
+      fileId: spreadsheetId,
+      sendNotificationEmail: dto.sendNotification !== false,
+      emailMessage: dto.message,
+      requestBody: {
+        type: 'user',
+        role: dto.role || ShareRole.READER,
+        emailAddress: dto.emailAddress,
+      },
+    });
+    return {
+      permissionId: data.id,
+      role: data.role,
+      emailAddress: dto.emailAddress,
+    };
+  }
+
+  async listPermissions(tokenLabel: string, spreadsheetId: string) {
+    const drive = await this.getDriveApi(tokenLabel);
+    const { data } = await drive.permissions.list({
+      fileId: spreadsheetId,
+      fields: 'permissions(id,type,role,emailAddress,displayName)',
+    });
+    return data.permissions || [];
+  }
+
+  async removePermission(tokenLabel: string, spreadsheetId: string, permissionId: string): Promise<void> {
+    const drive = await this.getDriveApi(tokenLabel);
+    await drive.permissions.delete({
+      fileId: spreadsheetId,
+      permissionId,
+    });
+  }
+
+  async exportAsBuffer(tokenLabel: string, spreadsheetId: string, mimeType: string): Promise<Buffer> {
+    const drive = await this.getDriveApi(tokenLabel);
+    const { data } = await drive.files.export(
+      { fileId: spreadsheetId, mimeType },
+      { responseType: 'arraybuffer' },
+    );
+    return Buffer.from(data as ArrayBuffer);
+  }
+
+  async listSavedSheets(tokenLabel?: string): Promise<GoogleSheet[]> {
+    const where = tokenLabel ? { tokenLabel } : {};
+    return this.sheetRepository.find({ where, order: { createdAt: 'DESC' } });
+  }
+}
