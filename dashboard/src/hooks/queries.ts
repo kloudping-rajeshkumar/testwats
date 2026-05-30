@@ -10,6 +10,7 @@ import {
   contactApi,
   scheduledMessageApi,
   templateApi,
+  googleSheetsApi,
   type Webhook,
 } from '../services/api';
 
@@ -32,6 +33,8 @@ export const queryKeys = {
   plugins: ['plugins'] as const,
   engines: ['engines'] as const,
   currentEngine: ['engines', 'current'] as const,
+  googleAccounts: ['google', 'accounts'] as const,
+  googleSpreadsheets: (tokenLabel?: string) => ['google', 'spreadsheets', tokenLabel] as const,
 };
 
 // ── Session Queries ───────────────────────────────────────────────────
@@ -350,5 +353,75 @@ export function useDeleteTemplateMutation() {
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ['templates'] });
     },
+  });
+}
+
+// ── Google Sheets Queries ────────────────────────────────────────────
+
+export function useGoogleAccountsQuery() {
+  return useQuery({
+    queryKey: queryKeys.googleAccounts,
+    queryFn: googleSheetsApi.listAccounts,
+    staleTime: 30_000,
+  });
+}
+
+export function useGoogleSpreadsheetsQuery(tokenLabel?: string) {
+  return useQuery({
+    queryKey: queryKeys.googleSpreadsheets(tokenLabel),
+    queryFn: () => googleSheetsApi.listSpreadsheets(tokenLabel),
+    staleTime: 30_000,
+  });
+}
+
+export function useConnectGoogleMutation() {
+  return useMutation({
+    mutationFn: (label: string) => googleSheetsApi.getAuthUrl(label),
+  });
+}
+
+export function useRemoveGoogleAccountMutation() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (label: string) => googleSheetsApi.removeAccount(label),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: queryKeys.googleAccounts });
+    },
+  });
+}
+
+export function useCreateSpreadsheetMutation() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (data: { tokenLabel: string; title: string; sheetNames?: string[]; headers?: string[] }) =>
+      googleSheetsApi.createSpreadsheet(data),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['google', 'spreadsheets'] });
+    },
+  });
+}
+
+export function useDeleteSpreadsheetMutation() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (params: { spreadsheetId: string; tokenLabel: string }) =>
+      googleSheetsApi.deleteSpreadsheet(params.spreadsheetId, params.tokenLabel),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['google', 'spreadsheets'] });
+    },
+  });
+}
+
+export function useShareSpreadsheetMutation() {
+  return useMutation({
+    mutationFn: (params: { spreadsheetId: string; data: { tokenLabel: string; emailAddress: string; role?: string; sendNotification?: boolean; message?: string } }) =>
+      googleSheetsApi.shareSpreadsheet(params.spreadsheetId, params.data),
+  });
+}
+
+export function useSendSheetWhatsAppMutation() {
+  return useMutation({
+    mutationFn: (params: { spreadsheetId: string; data: { tokenLabel: string; sessionId: string; chatId: string; format?: string; caption?: string } }) =>
+      googleSheetsApi.sendViaWhatsApp(params.spreadsheetId, params.data),
   });
 }

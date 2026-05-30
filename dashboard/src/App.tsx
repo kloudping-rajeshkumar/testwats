@@ -20,6 +20,7 @@ const Infrastructure = lazy(() => import('./pages/Infrastructure').then(m => ({ 
 const ScheduledMessages = lazy(() => import('./pages/ScheduledMessages'));
 const Templates = lazy(() => import('./pages/Templates'));
 const Plugins = lazy(() => import('./pages/Plugins'));
+const GoogleSheets = lazy(() => import('./pages/GoogleSheets').then(m => ({ default: m.GoogleSheets })));
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -111,6 +112,7 @@ function AppContent() {
             <Route path="scheduled" element={<ScheduledMessages />} />
             <Route path="templates" element={<Templates />} />
             <Route path="message-tester" element={<MessageTester />} />
+            <Route path="google-sheets" element={<GoogleSheets />} />
             <Route path="infrastructure" element={<Infrastructure />} />
             {role === 'admin' && <Route path="plugins" element={<Plugins />} />}
             <Route path="*" element={<Navigate to="/" replace />} />

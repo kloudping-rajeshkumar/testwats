@@ -428,6 +428,93 @@ export const templateApi = {
 };
 
 // =============================================================================
+// Google Sheets API
+// =============================================================================
+
+export interface GoogleAccount {
+  id: string;
+  label: string;
+  email: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface GoogleSpreadsheet {
+  id: string;
+  tokenLabel: string;
+  spreadsheetId: string;
+  title: string;
+  spreadsheetUrl: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface SpreadsheetInfo {
+  spreadsheetId: string;
+  title: string;
+  url: string;
+  sheets: { sheetId: number; title: string; rowCount: number; columnCount: number }[];
+}
+
+export interface SheetPermission {
+  id: string;
+  type: string;
+  role: string;
+  emailAddress?: string;
+  displayName?: string;
+}
+
+export const googleSheetsApi = {
+  getAuthUrl: (label: string) =>
+    request<{ url: string; label: string }>('/google-sheets/auth', {
+      method: 'POST',
+      body: JSON.stringify({ label }),
+    }),
+  listAccounts: () => request<GoogleAccount[]>('/google-sheets/accounts'),
+  removeAccount: (label: string) =>
+    request<{ success: boolean }>(`/google-sheets/accounts/${encodeURIComponent(label)}`, { method: 'DELETE' }),
+  createSpreadsheet: (data: { tokenLabel: string; title: string; sheetNames?: string[]; headers?: string[] }) =>
+    request<GoogleSpreadsheet>('/google-sheets/spreadsheets', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
+  listSpreadsheets: (tokenLabel?: string) => {
+    const query = tokenLabel ? `?tokenLabel=${encodeURIComponent(tokenLabel)}` : '';
+    return request<GoogleSpreadsheet[]>(`/google-sheets/spreadsheets${query}`);
+  },
+  getSpreadsheet: (spreadsheetId: string, tokenLabel: string) =>
+    request<SpreadsheetInfo>(`/google-sheets/spreadsheets/${spreadsheetId}?tokenLabel=${encodeURIComponent(tokenLabel)}`),
+  deleteSpreadsheet: (spreadsheetId: string, tokenLabel: string) =>
+    request<void>(`/google-sheets/spreadsheets/${spreadsheetId}?tokenLabel=${encodeURIComponent(tokenLabel)}`, { method: 'DELETE' }),
+  readRange: (spreadsheetId: string, range: string, tokenLabel: string) =>
+    request<{ range: string; values: string[][] }>(`/google-sheets/spreadsheets/${spreadsheetId}/values/${encodeURIComponent(range)}?tokenLabel=${encodeURIComponent(tokenLabel)}`),
+  updateRange: (spreadsheetId: string, data: { tokenLabel: string; range: string; values: string[][] }) =>
+    request<{ updatedRange: string; updatedRows: number; updatedCells: number }>(`/google-sheets/spreadsheets/${spreadsheetId}/values`, {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    }),
+  appendRows: (spreadsheetId: string, data: { tokenLabel: string; range?: string; values: string[][] }) =>
+    request<{ updatedRange: string; updatedRows: number }>(`/google-sheets/spreadsheets/${spreadsheetId}/values/append`, {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
+  shareSpreadsheet: (spreadsheetId: string, data: { tokenLabel: string; emailAddress: string; role?: string; sendNotification?: boolean; message?: string }) =>
+    request<{ permissionId: string; role: string; emailAddress: string }>(`/google-sheets/spreadsheets/${spreadsheetId}/share`, {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
+  listPermissions: (spreadsheetId: string, tokenLabel: string) =>
+    request<SheetPermission[]>(`/google-sheets/spreadsheets/${spreadsheetId}/permissions?tokenLabel=${encodeURIComponent(tokenLabel)}`),
+  removePermission: (spreadsheetId: string, permissionId: string, tokenLabel: string) =>
+    request<void>(`/google-sheets/spreadsheets/${spreadsheetId}/permissions/${permissionId}?tokenLabel=${encodeURIComponent(tokenLabel)}`, { method: 'DELETE' }),
+  sendViaWhatsApp: (spreadsheetId: string, data: { tokenLabel: string; sessionId: string; chatId: string; format?: string; caption?: string }) =>
+    request<{ messageId: string; format: string }>(`/google-sheets/spreadsheets/${spreadsheetId}/send`, {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
+};
+
+// =============================================================================
 // Health & Infrastructure API
 // =============================================================================
 

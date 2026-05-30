@@ -64,7 +64,8 @@
     "messageTester": "Message Tester",
     "infrastructure": "Infrastructure",
     "plugins": "Plugins",
-    "logs": "Logs"
+    "logs": "Logs",
+    "googleSheets": "Google Sheets"
   },
   "errorBoundary": {
     "title": "Something went wrong",
@@ -467,6 +468,69 @@
     },
     "toasts": {
       "saveFailed": "Save Failed"
+    }
+  },
+  "googleSheets": {
+    "title": "Google Sheets",
+    "subtitle": "Create, edit, share spreadsheets and send via WhatsApp",
+    "accounts": "Connected Accounts",
+    "connectAccount": "Connect Google Account",
+    "connectLabel": "Account Label",
+    "connectLabelPlaceholder": "e.g., work, personal",
+    "connectHint": "A unique label to identify this Google account",
+    "connecting": "Opening Google login...",
+    "noAccounts": "No Google accounts connected",
+    "noAccountsDesc": "Connect a Google account to start creating and managing spreadsheets",
+    "removeAccount": "Disconnect Account",
+    "removeConfirm": "Are you sure you want to disconnect the Google account \"{{label}}\"?",
+    "spreadsheets": "Spreadsheets",
+    "createSheet": "Create Spreadsheet",
+    "sheetTitle": "Spreadsheet Title",
+    "sheetTitlePlaceholder": "e.g., Sales Report Q4",
+    "account": "Google Account",
+    "selectAccount": "Select account...",
+    "headers": "Header Columns",
+    "headersPlaceholder": "e.g., Name, Email, Phone (comma separated)",
+    "noSheets": "No spreadsheets yet",
+    "noSheetsDesc": "Create a spreadsheet to get started",
+    "openInGoogle": "Open in Google Sheets",
+    "share": "Share",
+    "sendWhatsApp": "Send via WhatsApp",
+    "shareTitle": "Share Spreadsheet",
+    "shareEmail": "Email Address",
+    "shareEmailPlaceholder": "user@example.com",
+    "shareRole": "Permission",
+    "shareRoles": {
+      "reader": "Viewer",
+      "writer": "Editor",
+      "commenter": "Commenter"
+    },
+    "shareMessage": "Notification Message",
+    "shareMessagePlaceholder": "Optional message for the notification email",
+    "sendTitle": "Send via WhatsApp",
+    "sendSession": "WhatsApp Session",
+    "sendChatId": "Recipient Chat ID",
+    "sendChatIdPlaceholder": "e.g., 628123456789@c.us",
+    "sendFormat": "Send As",
+    "sendFormats": {
+      "link": "Link",
+      "pdf": "PDF File",
+      "xlsx": "Excel File"
+    },
+    "sendCaption": "Caption",
+    "sendCaptionPlaceholder": "Optional message to send with the sheet",
+    "toasts": {
+      "accountConnected": "Google account connected",
+      "accountRemoved": "Google account disconnected",
+      "accountRemoveFailed": "Failed to disconnect account",
+      "sheetCreated": "Spreadsheet created successfully",
+      "sheetCreateFailed": "Failed to create spreadsheet",
+      "sheetDeleted": "Spreadsheet deleted",
+      "sheetDeleteFailed": "Failed to delete spreadsheet",
+      "shared": "Spreadsheet shared successfully",
+      "shareFailed": "Failed to share spreadsheet",
+      "sent": "Spreadsheet sent via WhatsApp",
+      "sendFailed": "Failed to send via WhatsApp"
     }
   },
   "plugins": {

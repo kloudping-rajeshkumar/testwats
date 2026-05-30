@@ -28,6 +28,7 @@ import { PluginsModule } from './core/plugins';
 import { PluginsApiModule } from './modules/plugins/plugins.module';
 import { ScheduleModule } from './modules/schedule/schedule.module';
 import { TemplateModule } from './modules/template/template.module';
+import { GoogleSheetsModule } from './modules/google-sheets/google-sheets.module';
 
 // Only import QueueModule if explicitly enabled to avoid Redis connection errors
 const queueModules: Array<Type | DynamicModule> = [];
@@ -76,6 +77,7 @@ if (process.env.QUEUE_ENABLED === 'true') {
             __dirname + '/modules/contact/**/*.entity{.ts,.js}',
             __dirname + '/modules/schedule/**/*.entity{.ts,.js}',
             __dirname + '/modules/template/**/*.entity{.ts,.js}',
+            __dirname + '/modules/google-sheets/**/*.entity{.ts,.js}',
           ],
           migrations: [__dirname + '/database/migrations/*{.ts,.js}'],
           logging: configService.get<boolean>('dataDatabase.logging', false),
@@ -166,6 +168,7 @@ if (process.env.QUEUE_ENABLED === 'true') {
     PluginsApiModule, // Phase 5: Plugins API
     ScheduleModule, // Scheduled Messages
     TemplateModule, // Message Templates
+    GoogleSheetsModule, // Google Sheets Integration
   ],
 })
 export class AppModule {}
