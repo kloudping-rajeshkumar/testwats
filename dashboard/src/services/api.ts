@@ -482,6 +482,15 @@ export const googleSheetsApi = {
     const query = tokenLabel ? `?tokenLabel=${encodeURIComponent(tokenLabel)}` : '';
     return request<GoogleSpreadsheet[]>(`/google-sheets/spreadsheets${query}`);
   },
+  syncFromDrive: (tokenLabel: string) =>
+    request<{ synced: number; total: number }>(`/google-sheets/spreadsheets/sync?tokenLabel=${encodeURIComponent(tokenLabel)}`, {
+      method: 'POST',
+    }),
+  importByUrl: (data: { tokenLabel: string; spreadsheetUrl: string }) =>
+    request<GoogleSpreadsheet>('/google-sheets/spreadsheets/import', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
   getSpreadsheet: (spreadsheetId: string, tokenLabel: string) =>
     request<SpreadsheetInfo>(`/google-sheets/spreadsheets/${spreadsheetId}?tokenLabel=${encodeURIComponent(tokenLabel)}`),
   deleteSpreadsheet: (spreadsheetId: string, tokenLabel: string) =>

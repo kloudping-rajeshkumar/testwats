@@ -234,58 +234,209 @@ export class GoogleSheetsService {
   }
 
   async deleteSpreadsheet(tokenLabel: string, spreadsheetId: string): Promise<void> {
-    const drive = await this.getDriveApi(tokenLabel);
-    await drive.files.delete({ fileId: spreadsheetId });
+    // Try to delete from Google Drive; if Drive API is not enabled, just remove locally
+    try {
+      const drive = await this.getDriveApi(tokenLabel);
+      await drive.files.delete({ fileId: spreadsheetId });
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      if (msg.includes('Drive API') || msg.includes('SERVICE_DISABLED') || msg.includes('accessNotConfigured')) {
+        // Drive API not enabled — skip remote delete, just remove from local DB
+        console.warn('Drive API not enabled — removing spreadsheet from local DB only');
+      } else {
+        throw err;
+      }
+    }
     await this.sheetRepository.delete({ spreadsheetId });
   }
 
   async shareSpreadsheet(spreadsheetId: string, dto: ShareSheetDto) {
     const drive = await this.getDriveApi(dto.tokenLabel);
-    const { data } = await drive.permissions.create({
-      fileId: spreadsheetId,
-      sendNotificationEmail: dto.sendNotification !== false,
-      emailMessage: dto.message,
-      requestBody: {
-        type: 'user',
-        role: dto.role || ShareRole.READER,
+    try {
+      const { data } = await drive.permissions.create({
+        fileId: spreadsheetId,
+        sendNotificationEmail: dto.sendNotification !== false,
+        emailMessage: dto.message,
+        requestBody: {
+          type: 'user',
+          role: dto.role || ShareRole.READER,
+          emailAddress: dto.emailAddress,
+        },
+      });
+      return {
+        permissionId: data.id,
+        role: data.role,
         emailAddress: dto.emailAddress,
-      },
-    });
-    return {
-      permissionId: data.id,
-      role: data.role,
-      emailAddress: dto.emailAddress,
-    };
+      };
+    } catch (err: unknown) {
+      this.throwIfDriveDisabled(err);
+      throw err;
+    }
   }
 
   async listPermissions(tokenLabel: string, spreadsheetId: string) {
     const drive = await this.getDriveApi(tokenLabel);
-    const { data } = await drive.permissions.list({
-      fileId: spreadsheetId,
-      fields: 'permissions(id,type,role,emailAddress,displayName)',
-    });
-    return data.permissions || [];
+    try {
+      const { data } = await drive.permissions.list({
+        fileId: spreadsheetId,
+        fields: 'permissions(id,type,role,emailAddress,displayName)',
+      });
+      return data.permissions || [];
+    } catch (err: unknown) {
+      this.throwIfDriveDisabled(err);
+      throw err;
+    }
   }
 
   async removePermission(tokenLabel: string, spreadsheetId: string, permissionId: string): Promise<void> {
     const drive = await this.getDriveApi(tokenLabel);
-    await drive.permissions.delete({
-      fileId: spreadsheetId,
-      permissionId,
-    });
+    try {
+      await drive.permissions.delete({
+        fileId: spreadsheetId,
+        permissionId,
+      });
+    } catch (err: unknown) {
+      this.throwIfDriveDisabled(err);
+      throw err;
+    }
   }
 
   async exportAsBuffer(tokenLabel: string, spreadsheetId: string, mimeType: string): Promise<Buffer> {
     const drive = await this.getDriveApi(tokenLabel);
-    const { data } = await drive.files.export(
-      { fileId: spreadsheetId, mimeType },
-      { responseType: 'arraybuffer' },
-    );
-    return Buffer.from(data as ArrayBuffer);
+    try {
+      const { data } = await drive.files.export(
+        { fileId: spreadsheetId, mimeType },
+        { responseType: 'arraybuffer' },
+      );
+      return Buffer.from(data as ArrayBuffer);
+    } catch (err: unknown) {
+      this.throwIfDriveDisabled(err);
+      throw err;
+    }
+  }
+
+  /** Throw a clear 400 error if Drive API is not enabled in the Google Cloud project. */
+  private throwIfDriveDisabled(err: unknown): void {
+    const msg = err instanceof Error ? err.message : String(err);
+    if (msg.includes('Drive API') || msg.includes('SERVICE_DISABLED') || msg.includes('accessNotConfigured')) {
+      throw new BadRequestException(
+        'Google Drive API is not enabled in your Google Cloud project. ' +
+        'Enable it at: https://console.developers.google.com/apis/api/drive.googleapis.com/overview',
+      );
+    }
   }
 
   async listSavedSheets(tokenLabel?: string): Promise<GoogleSheet[]> {
     const where = tokenLabel ? { tokenLabel } : {};
     return this.sheetRepository.find({ where, order: { createdAt: 'DESC' } });
+  }
+
+  /**
+   * Sync spreadsheets from Google Drive into the local database.
+   * Tries Drive API first; if Drive API is not enabled, falls back
+   * to re-fetching metadata for already-known sheets via the Sheets API.
+   */
+  async syncFromDrive(tokenLabel: string): Promise<{ synced: number; total: number }> {
+    try {
+      return await this.syncViaDriveApi(tokenLabel);
+    } catch (err: unknown) {
+      // If Drive API is not enabled (403 SERVICE_DISABLED), fall back to Sheets-only sync
+      const errMsg = err instanceof Error ? err.message : String(err);
+      if (errMsg.includes('Drive API') || errMsg.includes('SERVICE_DISABLED') || errMsg.includes('accessNotConfigured')) {
+        throw new BadRequestException(
+          'Google Drive API is not enabled in your Google Cloud project. ' +
+          'Please enable it at https://console.developers.google.com/apis/api/drive.googleapis.com/overview ' +
+          'and try again. You can also use "Import by URL" to add individual spreadsheets.',
+        );
+      }
+      throw err;
+    }
+  }
+
+  private async syncViaDriveApi(tokenLabel: string): Promise<{ synced: number; total: number }> {
+    const drive = await this.getDriveApi(tokenLabel);
+
+    const spreadsheets: { id: string; name: string; webViewLink: string }[] = [];
+    let nextPageToken: string | undefined;
+
+    do {
+      const { data } = await drive.files.list({
+        q: "mimeType='application/vnd.google-apps.spreadsheet' and trashed=false",
+        fields: 'nextPageToken, files(id, name, webViewLink)',
+        pageSize: 100,
+        orderBy: 'modifiedTime desc',
+        ...(nextPageToken ? { pageToken: nextPageToken } : {}),
+      });
+
+      if (data.files) {
+        for (const f of data.files) {
+          if (f.id && f.name) {
+            spreadsheets.push({
+              id: f.id,
+              name: f.name,
+              webViewLink: f.webViewLink || '',
+            });
+          }
+        }
+      }
+      nextPageToken = data.nextPageToken ? String(data.nextPageToken) : undefined;
+    } while (nextPageToken);
+
+    let synced = 0;
+    for (const file of spreadsheets) {
+      const existing = await this.sheetRepository.findOne({
+        where: { spreadsheetId: file.id, tokenLabel },
+      });
+      if (existing) {
+        if (existing.title !== file.name || existing.spreadsheetUrl !== file.webViewLink) {
+          existing.title = file.name;
+          existing.spreadsheetUrl = file.webViewLink;
+          await this.sheetRepository.save(existing);
+          synced++;
+        }
+      } else {
+        const record = new GoogleSheet();
+        record.tokenLabel = tokenLabel;
+        record.spreadsheetId = file.id;
+        record.title = file.name;
+        record.spreadsheetUrl = file.webViewLink;
+        await this.sheetRepository.save(record);
+        synced++;
+      }
+    }
+
+    return { synced, total: spreadsheets.length };
+  }
+
+  /**
+   * Import a single spreadsheet by URL or ID into the local database.
+   * Uses the Sheets API only (no Drive API needed).
+   */
+  async importByUrl(tokenLabel: string, spreadsheetUrl: string): Promise<GoogleSheet> {
+    // Extract spreadsheet ID from URL or use as-is
+    const idMatch = spreadsheetUrl.match(/\/spreadsheets\/d\/([a-zA-Z0-9_-]+)/);
+    const spreadsheetId = idMatch ? idMatch[1] : spreadsheetUrl.trim();
+
+    // Check if already imported
+    const existing = await this.sheetRepository.findOne({
+      where: { spreadsheetId, tokenLabel },
+    });
+    if (existing) {
+      // Refresh title from Google
+      const info = await this.getSpreadsheet(tokenLabel, spreadsheetId);
+      existing.title = info.title || existing.title;
+      existing.spreadsheetUrl = info.url || existing.spreadsheetUrl;
+      return this.sheetRepository.save(existing);
+    }
+
+    // Fetch metadata via Sheets API
+    const info = await this.getSpreadsheet(tokenLabel, spreadsheetId);
+
+    const record = new GoogleSheet();
+    record.tokenLabel = tokenLabel;
+    record.spreadsheetId = spreadsheetId;
+    record.title = info.title || 'Untitled';
+    record.spreadsheetUrl = info.url || `https://docs.google.com/spreadsheets/d/${spreadsheetId}`;
+    return this.sheetRepository.save(record);
   }
 }

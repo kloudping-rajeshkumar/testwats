@@ -425,3 +425,24 @@ export function useSendSheetWhatsAppMutation() {
       googleSheetsApi.sendViaWhatsApp(params.spreadsheetId, params.data),
   });
 }
+
+export function useSyncFromDriveMutation() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (tokenLabel: string) => googleSheetsApi.syncFromDrive(tokenLabel),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['google', 'spreadsheets'] });
+    },
+  });
+}
+
+export function useImportByUrlMutation() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (data: { tokenLabel: string; spreadsheetUrl: string }) =>
+      googleSheetsApi.importByUrl(data),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['google', 'spreadsheets'] });
+    },
+  });
+}

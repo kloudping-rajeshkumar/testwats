@@ -3,6 +3,7 @@ import { ApiTags, ApiOperation, ApiResponse, ApiParam, ApiQuery } from '@nestjs/
 import type { Response } from 'express';
 import { GoogleSheetsService } from './google-sheets.service';
 import { SessionService } from '../session/session.service';
+import { Public } from '../auth/decorators/auth.decorators';
 import { ConnectGoogleDto, CreateSheetDto, UpdateSheetDto, ShareSheetDto, SendSheetDto, AppendRowsDto } from './dto';
 import { SendFormat } from './dto/send-sheet.dto';
 
@@ -24,15 +25,27 @@ export class GoogleSheetsController {
     return { url, label: dto.label };
   }
 
+  @Public()
   @Get('oauth/callback')
   @ApiOperation({ summary: 'OAuth2 callback endpoint (Google redirects here)' })
   async oauthCallback(
     @Query('code') code: string,
     @Query('state') label: string,
+    @Query('error') error: string,
     @Res() res: Response,
   ) {
-    await this.googleSheetsService.handleOAuthCallback(code, label);
-    res.send(`<html><body><h2>Google account "${label}" connected successfully!</h2><p>You can close this window.</p></body></html>`);
+    if (error) {
+      res.status(400).send(`<html><body><h2>Google OAuth Error</h2><p>${error}</p></body></html>`);
+      return;
+    }
+    try {
+      await this.googleSheetsService.handleOAuthCallback(code, label);
+      res.send(`<html><body><h2>Google account "${label}" connected successfully!</h2><p>You can close this window and refresh the dashboard.</p></body></html>`);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      console.error('Google OAuth callback error:', message);
+      res.status(500).send(`<html><body><h2>Connection Failed</h2><p>${message}</p></body></html>`);
+    }
   }
 
   // ── Account Management ─────────────────────────────────────────────
@@ -51,6 +64,23 @@ export class GoogleSheetsController {
   async removeAccount(@Param('label') label: string) {
     await this.googleSheetsService.removeAccount(label);
     return { success: true, message: `Account "${label}" disconnected` };
+  }
+
+  // ── Sync from Google Drive ──────────────────────────────────────────
+
+  @Post('spreadsheets/sync')
+  @ApiOperation({ summary: 'Sync spreadsheets from Google Drive into local database' })
+  @ApiQuery({ name: 'tokenLabel', required: true, description: 'Google account label' })
+  @ApiResponse({ status: 200, description: 'Sync result with count of synced sheets' })
+  async syncFromDrive(@Query('tokenLabel') tokenLabel: string) {
+    return this.googleSheetsService.syncFromDrive(tokenLabel);
+  }
+
+  @Post('spreadsheets/import')
+  @ApiOperation({ summary: 'Import an existing spreadsheet by URL or ID' })
+  @ApiResponse({ status: 200, description: 'Spreadsheet imported' })
+  async importByUrl(@Body() body: { tokenLabel: string; spreadsheetUrl: string }) {
+    return this.googleSheetsService.importByUrl(body.tokenLabel, body.spreadsheetUrl);
   }
 
   // ── Spreadsheet CRUD ───────────────────────────────────────────────
